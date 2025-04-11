@@ -1,16 +1,18 @@
 import React, { useState } from "react";
 import "./RegistrationForm.css";
+import axios from "axios";
 
 const RegistrationForm = () => {
   const [formData, setFormData] = useState({
     customerName: "",
     email: "",
-    address: "",
-    city: "",
-    zipCode: "",
     personalNumber: "",
     mobileNumber: "",
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -20,29 +22,63 @@ const RegistrationForm = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Here you would typically send the data to your backend
-    console.log("Form submitted:", formData);
-    alert("Registration submitted successfully!");
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await axios.post(
+        "http://localhost:5000/api/clients/register",
+        formData
+      );
+      console.log("Registration successful:", response.data);
+      setSuccess(true);
+      setSuccessMessage("Registration submitted successfully!");
+      // Optionally clear the form after successful submission
+      handleClear();
+    } catch (err) {
+      console.error("Registration error:", err.response?.data || err.message);
+      setError(
+        err.response?.data?.message || "Registration failed. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClear = () => {
     setFormData({
       customerName: "",
       email: "",
-      address: "",
-      city: "",
-      zipCode: "",
       personalNumber: "",
       mobileNumber: "",
     });
+    setSuccess(false);
+    setError(null);
   };
 
   return (
     <div className="registration-container">
       <h1>New Client Registration</h1>
       <h2>Client Registration for BankID verification</h2>
+
+      {success && (
+        <div className="success-message">
+          <div className="success-icon">✓</div>
+          <div className="success-text">
+            <h3>Registration Successful!</h3>
+            <p>{successMessage}</p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="alert alert-error">
+          <div className="error-icon">!</div>
+          <div>{error}</div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
@@ -67,44 +103,6 @@ const RegistrationForm = () => {
             onChange={handleChange}
             required
           />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="address">Address</label>
-          <input
-            type="text"
-            id="address"
-            name="address"
-            value={formData.address}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <div className="form-row">
-          <div className="form-group city-group">
-            <label htmlFor="city">City</label>
-            <input
-              type="text"
-              id="city"
-              name="city"
-              value={formData.city}
-              onChange={handleChange}
-              required
-            />
-          </div>
-
-          <div className="form-group zip-group">
-            <label htmlFor="zipCode">ZIP Code</label>
-            <input
-              type="text"
-              id="zipCode"
-              name="zipCode"
-              value={formData.zipCode}
-              onChange={handleChange}
-              required
-            />
-          </div>
         </div>
 
         <div className="form-group">
