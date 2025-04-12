@@ -26,6 +26,9 @@ const RegistrationForm = () => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setSuccessMessage(
+      "Registration submitted successfully! A verification email has been sent to your email address."
+    );
 
     try {
       const response = await axios.post(
