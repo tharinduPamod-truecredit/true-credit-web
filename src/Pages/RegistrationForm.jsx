@@ -26,19 +26,18 @@ const RegistrationForm = () => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
-    setSuccessMessage(
-      "Registration submitted successfully! A verification email has been sent to your email address."
-    );
 
     try {
       const response = await axios.post(
         "http://localhost:5000/api/clients/register",
         formData
       );
+
       console.log("Registration successful:", response.data);
       setSuccess(true);
-      setSuccessMessage("Registration submitted successfully!");
-      // Optionally clear the form after successful submission
+      setSuccessMessage(
+        "Registration successful! Confirmation has been sent to your email and mobile."
+      );
       handleClear();
     } catch (err) {
       console.error("Registration error:", err.response?.data || err.message);
@@ -133,8 +132,8 @@ const RegistrationForm = () => {
         </div>
 
         <div className="button-group">
-          <button type="submit" className="submit-btn">
-            Submit
+          <button type="submit" className="submit-btn" disabled={isSubmitting}>
+            {isSubmitting ? "Submitting..." : "Submit"}
           </button>
           <button type="button" onClick={handleClear} className="clear-btn">
             Clear
