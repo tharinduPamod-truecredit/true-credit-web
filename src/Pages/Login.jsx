@@ -1,9 +1,12 @@
 import { useForm } from "react-hook-form";
 import { useState } from "react";
 import "./Login.css";
+import axios from "axios";
 
 const Login = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const {
     register,
     handleSubmit,
@@ -12,33 +15,48 @@ const Login = () => {
     reset,
   } = useForm();
 
-  const onSubmit = (data) => {
+  const onSubmit = async (data) => {
+    setIsLoading(true);
+    setError(null);
     console.log(data);
     // Here you would make your API call
-    if (isLogin) {
-      // Login logic
-      console.log("Logging in with:", {
-        email: data.email,
-        password: data.password,
-      });
-    } else {
-      // Register logic
-      console.log("Registering with:", {
-        username: data.username,
-        email: data.email,
-        password: data.password,
-      });
+    try {
+      if (isLogin) {
+        // Login logic
+        const response = await axios.post(
+          "http://localhost:5000/api/auth/login",
+          data
+        );
+        console.log("Login successful:", response.data);
+      } else {
+        // Register logic
+        const response = await axios.post(
+          "http://localhost:5000/api/auth/register",
+          data
+        );
+        console.log("Registering successful:", response.data);
+        setIsLogin(true);
+        reset();
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || "An error occured");
+      console.error("Error:", err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const toggleForm = () => {
     setIsLogin(!isLogin);
+    setError(null);
     reset(); // Reset form when toggling
   };
 
   return (
     <div className="auth-container">
       <h1>{isLogin ? "Login" : "Register"}</h1>
+
+      {error && <div className="error-message">{error}</div>}
 
       <form onSubmit={handleSubmit(onSubmit)} className="auth-form">
         {!isLogin && (
@@ -116,8 +134,8 @@ const Login = () => {
           </div>
         )}
 
-        <button type="submit" className="submit-btn">
-          {isLogin ? "Login" : "Register"}
+        <button type="submit" className="submit-btn" disabled={isLoading}>
+          {isLoading ? "Processing..." : isLogin ? "Login" : "Register"}
         </button>
       </form>
 

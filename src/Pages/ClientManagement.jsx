@@ -1,28 +1,40 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import axios from "axios";
 import "./ClientManagement.css";
 
 const ClientManagement = () => {
-  const [clients, setClients] = useState([
-    {
-      id: 1,
-      name: "Erik Perera",
-      status: "Pending",
-      email: "Test1@gmail.com",
-      phone: "012234",
-      lastUpdate: "Last Update",
-    },
-    {
-      id: 2,
-      name: "John",
-      status: "Verified",
-      email: "Test2@gmail.com",
-      phone: "098765",
-      lastUpdate: "Last Update",
-    },
-  ]);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [setIsMenuOpen, isMenuOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Fetch clients from the backend API
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const response = await axios.get("http://localhost:5000/api/clients");
+        // Transform the data to match your frontend structure
+        const formattedClients = response.data.map((client) => ({
+          id: client.id,
+          name: client.customer_name,
+          status: client.is_verified ? "Verified" : "Pending",
+          email: client.email,
+          phone: client.mobile_number,
+          lastUpdate: new Date().toLocaleDateString(), // Or use actual update time if available
+        }));
+        setClients(formattedClients);
+        setLoading(false);
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
+        console.error("Error fetching clients:", err);
+      }
+    };
+
+    fetchClients();
+  }, []);
 
   const filteredClients = clients.filter(
     (client) =>
@@ -30,6 +42,14 @@ const ClientManagement = () => {
       client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.phone.includes(searchTerm)
   );
+
+  if (loading) {
+    return <div className="loading">Loading clients...</div>;
+  }
+
+  if (error) {
+    return <div className="error">Error: {error}</div>;
+  }
 
   return (
     <div className="client-management">
@@ -57,23 +77,29 @@ const ClientManagement = () => {
       </div>
 
       <div className="client-list">
-        {filteredClients.map((client) => (
-          <div key={client.id} className="client-card">
-            <div className="client-info">
-              <div className="name-status">
-                <h3>{client.name}</h3>
-                <span className={`status ${client.status.toLowerCase()}`}>
-                  {client.status}
-                </span>
+        {filteredClients.length > 0 ? (
+          filteredClients.map((client) => (
+            <div key={client.id} className="client-card">
+              <div className="client-info">
+                <div className="name-status">
+                  <h3>{client.name}</h3>
+                  <span className={`status ${client.status.toLowerCase()}`}>
+                    {client.status}
+                  </span>
+                </div>
+                <p>Email: {client.email}</p>
+                <p>TP: {client.phone}</p>
               </div>
-              <p>Email: {client.email}</p>
-              <p>TP: {client.phone}</p>
+              <div className="last-update">
+                <span>{client.lastUpdate}</span>
+              </div>
             </div>
-            <div className="last-update">
-              <span>{client.lastUpdate}</span>
-            </div>
+          ))
+        ) : (
+          <div className="no-clients">
+            {searchTerm ? "No matching clients found" : "No clients available"}
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
