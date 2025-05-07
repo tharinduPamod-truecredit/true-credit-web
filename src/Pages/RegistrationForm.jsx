@@ -13,6 +13,7 @@ const RegistrationForm = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [bankIdStarted, setBankIdStarted] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -22,23 +23,82 @@ const RegistrationForm = () => {
     }));
   };
 
+  const handleBankIDInitiation = async (personalNumber) => {
+    try {
+      setBankIdStarted(true);
+      const response = await axios.post(
+        "http://localhost:5000/api/clients/initiate-bankid",
+        { personalNumber }
+      );
+
+      if (response.data.bankidUrl) {
+        // Open BankID in a new window
+        const bankIdWindow = window.open(
+          response.data.bankidUrl,
+          "_blank",
+          "width=500,height=600"
+        );
+
+        // Start polling for verification status
+        pollForVerificationStatus(personalNumber, bankIdWindow);
+      }
+    } catch (error) {
+      setBankIdStarted(false);
+      setError(error.response?.data?.error || "BankID initiation failed");
+    }
+  };
+
+  const pollForVerificationStatus = async (personalNumber, bankIdWindow) => {
+    let attempts = 0;
+    const maxAttempts = 30; // ~2.5 minutes with 5s interval
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.post(
+          "http://localhost:5000/api/clients/verify-and-fetch",
+          { personalNumber }
+        );
+
+        if (response.data.status === "success") {
+          clearInterval(interval);
+          if (bankIdWindow) bankIdWindow.close();
+          setSuccessMessage(
+            "Registration and BankID verification complete! Customer details fetched successfully."
+          );
+          setSuccess(true);
+          handleClear();
+        }
+      } catch (error) {
+        attempts++;
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          if (bankIdWindow) bankIdWindow.close();
+          setBankIdStarted(false);
+          setError("BankID verification timed out. Please try again.");
+        }
+      }
+    }, 5000); // Poll every 5 seconds
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
 
     try {
+      // First, register the client
       const response = await axios.post(
         "http://localhost:5000/api/clients/register",
         formData
       );
 
-      console.log("Registration successful:", response.data);
-      setSuccess(true);
+      // Then initiate BankID flow
+      await handleBankIDInitiation(formData.personalNumber);
+
       setSuccessMessage(
-        "Registration successful! Confirmation has been sent to your email and mobile."
+        "Registration successful! Please complete BankID verification in the popup window."
       );
-      handleClear();
+      setSuccess(true);
     } catch (err) {
       console.error("Registration error:", err.response?.data || err.message);
       setError(
@@ -58,6 +118,7 @@ const RegistrationForm = () => {
     });
     setSuccess(false);
     setError(null);
+    setBankIdStarted(false);
   };
 
   return (
@@ -108,13 +169,17 @@ const RegistrationForm = () => {
         </div>
 
         <div className="form-group">
-          <label htmlFor="personalNumber">Personal Number</label>
+          <label htmlFor="personalNumber">
+            Personal Number (YYYYMMDD-XXXX)
+          </label>
           <input
             type="text"
             id="personalNumber"
             name="personalNumber"
             value={formData.personalNumber}
             onChange={handleChange}
+            pattern="\d{8}-\d{4}"
+            title="Please enter in format YYYYMMDD-XXXX"
             required
           />
         </div>
@@ -132,10 +197,23 @@ const RegistrationForm = () => {
         </div>
 
         <div className="button-group">
-          <button type="submit" className="submit-btn" disabled={isSubmitting}>
-            {isSubmitting ? "Submitting..." : "Submit"}
+          <button
+            type="submit"
+            className="submit-btn"
+            disabled={isSubmitting || bankIdStarted}
+          >
+            {isSubmitting
+              ? "Submitting..."
+              : bankIdStarted
+              ? "Waiting for BankID..."
+              : "Submit"}
           </button>
-          <button type="button" onClick={handleClear} className="clear-btn">
+          <button
+            type="button"
+            onClick={handleClear}
+            className="clear-btn"
+            disabled={bankIdStarted}
+          >
             Clear
           </button>
         </div>

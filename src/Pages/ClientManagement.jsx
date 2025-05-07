@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import { useCriiptoVerify } from "@criipto/verify-react";
 import "./ClientManagement.css";
 
 const ClientManagement = () => {
@@ -9,6 +10,20 @@ const ClientManagement = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const { redirectTo, claims } = useCriiptoVerify({
+    action: "redirect",
+    acrValues: "urn:grn:authn:se:bankid:same-device",
+    loginHint: "bankid",
+    redirectUri: window.location.origin + "/auth-callback",
+  });
+
+  // Handle successful authentication
+  useEffect(() => {
+    if (claims) {
+      window.location.href = `/clientform?personnummer=${claims.personal_identity_number}`;
+    }
+  }, [claims]);
 
   // Fetch clients from the backend API
   useEffect(() => {
@@ -35,6 +50,10 @@ const ClientManagement = () => {
 
     fetchClients();
   }, []);
+
+  const handleBankIDAuth = () => {
+    redirectTo();
+  };
 
   const filteredClients = clients.filter(
     (client) =>
@@ -66,13 +85,20 @@ const ClientManagement = () => {
         />
       </div>
 
-      <div className="add-client-btn">
+      <div className="auth-options">
+        <button onClick={handleBankIDAuth} className="bankid-auth-btn">
+          <img src="/bankid-logo.svg" alt="BankID" />
+          Add New Client with BankID
+        </button>
+
+        <span className="auth-divider">or</span>
+
         <Link
           to="/clientform"
           className="add-client-btn"
           onClick={() => setIsMenuOpen(false)}
         >
-          Add New a Client
+          Add Client Manually
         </Link>
       </div>
 
