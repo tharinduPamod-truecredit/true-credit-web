@@ -32,19 +32,42 @@ const RegistrationForm = () => {
       );
 
       if (response.data.bankidUrl) {
-        // Open BankID in a new window
         const bankIdWindow = window.open(
           response.data.bankidUrl,
           "_blank",
           "width=500,height=600"
         );
 
-        // Start polling for verification status
+        if (!bankIdWindow) {
+          throw new Error(
+            "Popup was blocked. Please allow popups for this site."
+          );
+        }
+
         pollForVerificationStatus(personalNumber, bankIdWindow);
       }
     } catch (error) {
       setBankIdStarted(false);
-      setError(error.response?.data?.error || "BankID initiation failed");
+
+      // Enhanced error handling
+      let errorMessage = "BankID initiation failed. Please try again.";
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        errorMessage =
+          error.response.data.error ||
+          error.response.data.details ||
+          `Server error: ${error.response.status}`;
+      } else if (error.request) {
+        // The request was made but no response was received
+        errorMessage = "No response from server. Check your connection.";
+      }
+
+      setError(errorMessage);
+      console.error("BankID Error Details:", {
+        message: error.message,
+        response: error.response?.data,
+        stack: error.stack,
+      });
     }
   };
 
