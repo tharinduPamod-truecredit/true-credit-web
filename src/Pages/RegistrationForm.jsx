@@ -16,6 +16,7 @@ const RegistrationForm = () => {
   const [authSession, setAuthSession] = useState(null);
   const [authStatus, setAuthStatus] = useState(null);
   const [pollingInterval, setPollingInterval] = useState(null);
+  const [qrCodeUrl, setQrCodeUrl] = useState(null);
 
   // Clean up polling on unmount
   useEffect(() => {
@@ -76,13 +77,25 @@ const RegistrationForm = () => {
       );
 
       console.log("Verification complete:", verificationResponse.data);
-      setSuccessMessage(
-        "Registration and verification completed successfully!"
-      );
-      setSuccess(true);
+      if (verificationResponse.data.status === "success") {
+        setSuccessMessage(
+          "Registration and verification completed successfully!"
+        );
+        setSuccess(true);
+      } else {
+        throw new Error(
+          verificationResponse.data.message || "Verification failed"
+        );
+      }
     } catch (error) {
       console.error("Verification error:", error);
-      setError("Failed to complete registration. Please contact support.");
+      setError(
+        error.message ||
+          "Failed to complete registration. Please contact support."
+      );
+      // Allow retry
+      setAuthSession(null);
+      setAuthStatus(null);
     }
   };
 
@@ -121,6 +134,11 @@ const RegistrationForm = () => {
             "Please check your inbox and scan the QR code with your Mobile BankID app to authenticate."
         );
         setSuccess(true);
+
+        // If the backend returns the QR code directly
+        if (qrResponse.data.qrCodeDataUrl) {
+          setQrCodeUrl(qrResponse.data.qrCodeDataUrl);
+        }
 
         // Start polling for authentication status
         startAuthPolling(qrResponse.data.reference || formData.personalNumber);
@@ -265,14 +283,23 @@ const RegistrationForm = () => {
         <div className="auth-instructions">
           <h3>BankID Authentication Instructions</h3>
           <ol>
-            <li>Check your email for the QR code</li>
-            <li>Open your Mobile BankID app</li>
-            <li>Scan the QR code to authenticate</li>
-            <li>Wait for the verification to complete</li>
+            <li>
+              Open the <strong>BankID</strong> app on your mobile device
+            </li>
+            <li>Tap "Scan QR code" in the app</li>
+            <li>Point your camera at the QR code</li>
+            <li>Confirm the login in the app</li>
           </ol>
-          <p className="note">
-            Note: This process will timeout after 15 minutes of inactivity.
+          <p className="warning">
+            Note: This will not work with regular QR scanners - you must use the
+            official BankID app
           </p>
+        </div>
+      )}
+      {qrCodeUrl && (
+        <div className="qr-code-container">
+          <img src={qrCodeUrl} alt="BankID QR Code" className="qr-code" />
+          <p>Scan this QR code with your Mobile BankID app</p>
         </div>
       )}
     </div>

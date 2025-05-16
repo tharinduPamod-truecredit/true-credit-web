@@ -113,3 +113,16 @@
   background: #6c757d;
   cursor: not-allowed;
 }
+
+.qr-code-container {
+  margin: 20px 0;
+  text-align: center;
+}
+
+.qr-code {
+  width: 200px;
+  height: 200px;
+  border: 1px solid #ddd;
+  padding: 10px;
+  background: white;
+}
