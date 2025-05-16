@@ -27,6 +27,13 @@ const Navbar = () => {
           >
             Login
           </Link>
+          <Link
+            to="/LinkedInScraper"
+            className="scrap-btn"
+            onClick={() => setIsMenuOpen(false)}
+          >
+            Scraper
+          </Link>
         </div>
       </div>
     </nav>
