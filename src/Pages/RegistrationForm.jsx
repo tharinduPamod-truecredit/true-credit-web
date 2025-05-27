@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./RegistrationForm.css";
 import axios from "axios";
 
@@ -13,23 +13,20 @@ const RegistrationForm = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  const [authSession, setAuthSession] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
   const [authStatus, setAuthStatus] = useState(null);
-  const [pollingInterval, setPollingInterval] = useState(null);
   const [qrCodeUrl, setQrCodeUrl] = useState(null);
-  const [authToken, setAuthToken] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [qrExpiry, setQrExpiry] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(null);
+  const pollingIntervalRef = useRef(null);
+  const qrRefreshIntervalRef = useRef(null);
 
-  // Clean up polling on unmount
+  // Clean up intervals on unmount
   useEffect(() => {
     return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+      if (qrRefreshIntervalRef.current)
+        clearInterval(qrRefreshIntervalRef.current);
     };
-  }, [pollingInterval]);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -39,66 +36,82 @@ const RegistrationForm = () => {
     }));
   };
 
-  const startAuthPolling = (reference) => {
-    const interval = setInterval(async () => {
+  const startDynamicQRPolling = async (sessionId) => {
+    // First clear any existing intervals
+    if (qrRefreshIntervalRef.current)
+      clearInterval(qrRefreshIntervalRef.current);
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+
+    // Get initial QR code
+    await fetchQRCode(sessionId);
+
+    // Set up QR refresh every second
+    qrRefreshIntervalRef.current = setInterval(async () => {
+      await fetchQRCode(sessionId);
+    }, 1000);
+
+    // Set up authentication status polling (every 3 seconds)
+    pollingIntervalRef.current = setInterval(async () => {
       try {
         const response = await axios.get(
-          `http://localhost:5000/api/clients/check-bankid-status/${reference}`
+          `http://localhost:5000/api/clients/check-bankid-status/${sessionId}`
         );
 
-        console.log("Polling response:", response.data);
-
         if (response.data.status === "completed") {
-          clearInterval(interval);
-          setPollingInterval(null);
+          clearIntervals();
           setAuthStatus("completed");
           setSuccessMessage("BankID authentication completed successfully!");
-          completeRegistration();
+          await completeRegistration();
         }
       } catch (error) {
         console.error("Polling error:", error);
         if (error.response?.status === 404) {
-          // Session expired
-          clearInterval(interval);
-          setPollingInterval(null);
+          clearIntervals();
           setError("Authentication session expired. Please try again.");
           setAuthStatus("expired");
         }
       }
-    }, 3000); // Poll every 3 seconds
+    }, 3000);
+  };
 
-    setPollingInterval(interval);
+  const fetchQRCode = async (sessionId) => {
+    try {
+      const response = await axios.get(
+        `http://localhost:5000/api/clients/dynamic-qr/current/${sessionId}`
+      );
+      setQrCodeUrl(response.data.qrDataUrl);
+    } catch (error) {
+      console.error("Failed to fetch QR code:", error);
+    }
+  };
+
+  const clearIntervals = () => {
+    if (qrRefreshIntervalRef.current)
+      clearInterval(qrRefreshIntervalRef.current);
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+    qrRefreshIntervalRef.current = null;
+    pollingIntervalRef.current = null;
   };
 
   const completeRegistration = async () => {
     try {
-      // Verify and fetch customer details
-      const verificationResponse = await axios.post(
+      const response = await axios.post(
         "http://localhost:5000/api/clients/verify-and-fetch",
-        {
-          personalNumber: formData.personalNumber,
-        }
+        { personalNumber: formData.personalNumber }
       );
 
-      console.log("Verification complete:", verificationResponse.data);
-      if (verificationResponse.data.status === "success") {
+      if (response.data.status === "success") {
         setSuccessMessage(
           "Registration and verification completed successfully!"
         );
         setSuccess(true);
       } else {
-        throw new Error(
-          verificationResponse.data.message || "Verification failed"
-        );
+        throw new Error(response.data.message || "Verification failed");
       }
     } catch (error) {
       console.error("Verification error:", error);
-      setError(
-        error.message ||
-          "Failed to complete registration. Please contact support."
-      );
-      // Allow retry
-      setAuthSession(null);
+      setError(error.message || "Failed to complete registration.");
+      setSessionId(null);
       setAuthStatus(null);
     }
   };
@@ -110,80 +123,42 @@ const RegistrationForm = () => {
     setSuccess(false);
 
     try {
-      // 1. First register the client
-      const registrationResponse = await axios.post(
-        "http://localhost:5000/api/clients/register",
+      // Start dynamic session
+      const response = await axios.post(
+        "http://localhost:5000/api/clients/start-dynamic-session",
         formData
       );
 
-      console.log("Registration response:", registrationResponse.data);
-
-      // 2. Generate BankID QR code
-      const qrResponse = await axios.post(
-        "http://localhost:5000/api/clients/send-bankid-qr",
-        {
-          personalNumber: formData.personalNumber,
-          mobileNumber: formData.mobileNumber,
-          email: formData.email,
-          customerName: formData.customerName,
-        }
-      );
-
-      setQrCodeUrl(qrResponse.data.qrCodeDataUrl);
-      setAuthToken(qrResponse.data.authRef);
-      setQrExpiry(new Date(qrResponse.data.expiresAt));
-      startAuthPolling(qrResponse.data.authRef);
-      console.log("QR response:", qrResponse.data);
-
-      // Start countdown timer
-      const timer = setInterval(() => {
-        const now = new Date();
-        const expiry = new Date(response.data.expiresAt);
-        const secondsLeft = Math.round((expiry - now) / 1000);
-
-        setTimeLeft(secondsLeft > 0 ? secondsLeft : 0);
-
-        if (secondsLeft <= 0) {
-          clearInterval(timer);
-          setError("QR code has expired. Please generate a new one.");
-        }
-      }, 100000);
-
-      // Store timer reference for cleanup
-      setPollingInterval(timer);
-
-      // Start authentication status polling
-      startAuthPolling(qrResponse.data.authRef);
-
-      if (qrResponse.data.status === "success") {
-        setAuthSession(qrResponse.data.reference);
-        setSuccessMessage(
-          "A Mobile BankID QR code has been sent to your email. " +
-            "Please check your inbox and scan the QR code with your Mobile BankID app to authenticate."
-        );
+      if (response.data.status === "success") {
+        setSessionId(response.data.sessionId);
+        setQrCodeUrl(response.data.initialQrDataUrl);
+        setSuccessMessage("Scan the QR code with your Mobile BankID app");
         setSuccess(true);
 
-        // If the backend returns the QR code directly
-        if (qrResponse.data.qrCodeDataUrl) {
-          setQrCodeUrl(qrResponse.data.qrCodeDataUrl);
-        }
+        // Start QR refresh interval
+        const interval = setInterval(async () => {
+          try {
+            const qrResponse = await axios.get(
+              `http://localhost:5000/api/clients/current-qr/${response.data.sessionId}`
+            );
+            setQrCodeUrl(qrResponse.data.qrDataUrl);
+          } catch (qrError) {
+            console.error("QR refresh error:", qrError);
+            if (qrError.response?.status === 404) {
+              clearInterval(interval);
+              setError("Session expired. Please start again.");
+            }
+          }
+        }, 1000);
 
-        // Start polling for authentication status
-        startAuthPolling(qrResponse.data.reference);
+        // Auto-clear after 2 minutes
+        setTimeout(() => {
+          clearInterval(interval);
+          if (!authStatus) {
+            setError("Authentication timed out. Please try again.");
+          }
+        }, 120000);
       }
-
-      const response = await axios.post(
-        "http://localhost:5000/api/bankid/init",
-        {
-          personalNumber: formData.personalNumber,
-          mobileNumber: formData.mobileNumber,
-          email: formData.email,
-          name: formData.name,
-        }
-      );
-      setAuthToken(response.data.authToken);
-      setQrCodeUrl(response.data.qrCodeDataUrl);
-      startAuthPolling(response.data.authToken);
     } catch (error) {
       console.error("Registration error:", {
         message: error.message,
@@ -191,33 +166,16 @@ const RegistrationForm = () => {
       });
 
       let errorMessage = "Registration failed. Please try again.";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-        if (error.response.data?.error) {
-          errorMessage += ` (${error.response.data.error})`;
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+        if (error.response.data.details) {
+          errorMessage += ` (${error.response.data.details})`;
         }
       }
 
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleAuthenticate = async () => {
-    if (!authToken) return;
-
-    try {
-      setIsLoading(true);
-      await axios.post("http://localhost:5000/api/bankid/authenticate", {
-        authToken,
-      });
-      // Polling will handle the status update
-    } catch (error) {
-      console.error("Authentication error:", error);
-      setError("Authentication failed. Please try again.");
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -230,12 +188,10 @@ const RegistrationForm = () => {
     });
     setSuccess(false);
     setError(null);
-    setAuthSession(null);
+    setSessionId(null);
     setAuthStatus(null);
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      setPollingInterval(null);
-    }
+    setQrCodeUrl(null);
+    clearIntervals();
   };
 
   return (
@@ -249,8 +205,12 @@ const RegistrationForm = () => {
           <div className="success-text">
             <h3>Registration Initiated!</h3>
             <p>{successMessage}</p>
-            {authStatus === "pending" && (
-              <div className="auth-status">
+            {authStatus === "completed" ? (
+              <div className="auth-status success">
+                ✓ Authentication complete
+              </div>
+            ) : (
+              <div className="auth-status pending">
                 <div className="spinner"></div>
                 <p>Waiting for BankID authentication...</p>
               </div>
@@ -276,7 +236,7 @@ const RegistrationForm = () => {
             value={formData.customerName}
             onChange={handleChange}
             required
-            disabled={authSession}
+            disabled={sessionId}
           />
         </div>
 
@@ -289,7 +249,7 @@ const RegistrationForm = () => {
             value={formData.email}
             onChange={handleChange}
             required
-            disabled={authSession}
+            disabled={sessionId}
           />
         </div>
 
@@ -303,10 +263,10 @@ const RegistrationForm = () => {
             name="personalNumber"
             value={formData.personalNumber}
             onChange={handleChange}
-            pattern="\d{8}-\d{4}"
-            title="Please enter in format YYYYMMDD-XXXX"
+            pattern="\d{6}-\d{4}"
+            title="Please enter in format YYMMDD-XXXX"
             required
-            disabled={authSession}
+            disabled={sessionId}
           />
         </div>
 
@@ -319,7 +279,7 @@ const RegistrationForm = () => {
             value={formData.mobileNumber}
             onChange={handleChange}
             required
-            disabled={authSession}
+            disabled={sessionId}
           />
         </div>
 
@@ -327,17 +287,17 @@ const RegistrationForm = () => {
           <button
             type="submit"
             className="submit-btn"
-            disabled={isSubmitting || authSession}
+            disabled={isSubmitting || sessionId}
           >
             {isSubmitting ? "Processing..." : "Register & Verify with BankID"}
           </button>
           <button type="button" onClick={handleClear} className="clear-btn">
-            {authSession ? "Cancel Verification" : "Clear"}
+            {sessionId ? "Cancel Verification" : "Clear"}
           </button>
         </div>
       </form>
 
-      {authSession && (
+      {sessionId && (
         <div className="auth-instructions">
           <h3>BankID Authentication Instructions</h3>
           <ol>
@@ -345,27 +305,20 @@ const RegistrationForm = () => {
               Open the <strong>BankID</strong> app on your mobile device
             </li>
             <li>Tap "Scan QR code" in the app</li>
-            <li>Point your camera at the QR code</li>
+            <li>Point your camera at the QR code below</li>
             <li>Confirm the login in the app</li>
           </ol>
           <p className="warning">
-            Note: This will not work with regular QR scanners - you must use the
-            official BankID app
+            Note: The QR code refreshes every second for security
           </p>
         </div>
       )}
+
       {qrCodeUrl && (
-        <div className="qr-container">
-          <h3>Scan with BankID App</h3>
-          <img src={qrCodeUrl} alt="BankID QR Code" />
-          {timeLeft !== null && (
-            <div className={`qr-timer ${timeLeft < 30 ? "warning" : ""}`}>
-              Expires in: {timeLeft}s
-            </div>
-          )}
-          {timeLeft === 0 && (
-            <button onClick={handleSubmit}>Generate New QR Code</button>
-          )}
+        <div className="qr-code-container">
+          <img src={qrCodeUrl} alt="BankID QR Code" className="qr-code" />
+          <p>Scan this QR code with your Mobile BankID app</p>
+          <p className="qr-refresh-note">(QR code refreshes automatically)</p>
         </div>
       )}
     </div>
