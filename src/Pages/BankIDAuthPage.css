@@ -1,0 +1,159 @@
+.bankid-auth-container {
+  max-width: 600px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.auth-header {
+  margin-bottom: 2rem;
+}
+
+.auth-header h1 {
+  color: #0066cc;
+  margin-bottom: 0.5rem;
+}
+
+.auth-header p {
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.auth-instructions {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 6px;
+  margin: 1.5rem 0;
+  text-align: left;
+}
+
+.auth-instructions h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.auth-instructions ol {
+  padding-left: 1.5rem;
+}
+
+.auth-instructions li {
+  margin-bottom: 0.5rem;
+}
+
+.countdown {
+  margin-top: 1rem;
+  font-weight: bold;
+  color: #0066cc;
+}
+
+/* In your BankIDAuthPage.css */
+.qr-code-wrapper {
+  margin: 20px auto;
+  text-align: center;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  max-width: 300px;
+}
+
+.qr-code {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.qr-code-refresh-indicator {
+  margin-top: 10px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  margin-right: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.auth-error {
+  background: #fff3f3;
+  border-left: 4px solid #ff4d4d;
+  padding: 1rem;
+  margin: 1.5rem 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  text-align: left;
+}
+
+.error-icon {
+  color: #ff4d4d;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.error-message {
+  flex: 1;
+}
+
+.retry-button {
+  background: #0066cc;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.retry-button:hover {
+  background: #0052a3;
+}
+
+.auth-success {
+  background: #f0fff4;
+  border-left: 4px solid #38a169;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.success-icon {
+  color: #38a169;
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+.auth-success h3 {
+  margin: 0.5rem 0;
+  color: #2f855a;
+}
+
+.auth-footer {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.auth-footer a {
+  color: #0066cc;
+  text-decoration: none;
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}

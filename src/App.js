@@ -13,6 +13,7 @@ import ClientManagement from './Pages/ClientManagement';
 import RegistrationForm from './Pages/RegistrationForm';
 import BankIDAuthPage from './Pages/BankIDAuthPage';
 import ViewQR from './Pages/ViewQR';
+import RegistrationSuccess from './Pages/RegistrationSuccess';
 
 
 function App() {
@@ -58,8 +59,9 @@ function App() {
           <Route path="/client-management" element={<ClientManagement />} />
           {/* <Route path="/report-analysis" element={<ReportAnalysis />} /> */}
           <Route path="/clientform" element={<RegistrationForm />} />
-          <Route path="/bankid-auth" element={<BankIDAuthPage />} />
+          <Route path="/bankid-auth/:authRef" element={<BankIDAuthPage />} />
           <Route path="/view-qr/:token" element={<ViewQR />} />
+          <Route path="/registration-success" element={<RegistrationSuccess />} />
 
         </Routes>
       </div>
