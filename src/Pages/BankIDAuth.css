@@ -1,0 +1,29 @@
+/* BankIDAuth.css */
+.bankid-auth {
+  margin: 20px 0;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.bankid-button {
+  background-color: #0058a3;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.bankid-button:hover {
+  background-color: #003d6b;
+}
+
+.bankid-auth .success {
+  color: green;
+}
+
+.bankid-auth .error {
+  color: red;
+}

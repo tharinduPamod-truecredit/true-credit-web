@@ -11,7 +11,8 @@ import Login from './Pages/Login';
 import ClientManagement from './Pages/ClientManagement';
 // import ReportAnalysis from './Pages/ReportAnalysis';
 import RegistrationForm from './Pages/RegistrationForm';
-import BankIDAuthPage from './Pages/BankIDAuthPage';
+import BankIDAuthPage from './Pages/BankIDAuth';
+import VerificationStatus from './Pages/VerificationStatus';
 import ViewQR from './Pages/ViewQR';
 
 
@@ -58,7 +59,7 @@ function App() {
           <Route path="/client-management" element={<ClientManagement />} />
           {/* <Route path="/report-analysis" element={<ReportAnalysis />} /> */}
           <Route path="/clientform" element={<RegistrationForm />} />
-          <Route path="/bankid-auth" element={<BankIDAuthPage />} />
+          <Route path="/verification-status" element={<VerificationStatus />} />
           <Route path="/view-qr/:token" element={<ViewQR />} />
 
         </Routes>
