@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import "./RegistrationForm.css";
 import axios from "axios";
+import "./RegistrationForm.css";
+import BankIDAuth from "./BankIDAuth";
+import BankIDAuthButton from "./BankIDAuthButton";
 
 const RegistrationForm = () => {
   const [formData, setFormData] = useState({
@@ -13,19 +15,11 @@ const RegistrationForm = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  const [authSession, setAuthSession] = useState(null);
-  const [authStatus, setAuthStatus] = useState(null);
-  const [pollingInterval, setPollingInterval] = useState(null);
-  const [qrCodeUrl, setQrCodeUrl] = useState(null);
-
-  // Clean up polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    };
-  }, [pollingInterval]);
+  const [verificationInProgress, setVerificationInProgress] = useState(false);
+  const [verificationComplete, setVerificationComplete] = useState(false);
+  const [customerData, setCustomerData] = useState(null);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -35,131 +29,157 @@ const RegistrationForm = () => {
     }));
   };
 
-  const startAuthPolling = (reference) => {
-    const interval = setInterval(async () => {
+  useEffect(() => {
+    const fetchClients = async () => {
       try {
-        const response = await axios.get(
-          `http://localhost:5000/api/clients/check-bankid-status/${reference}`
-        );
-
-        console.log("Polling response:", response.data);
-
-        if (response.data.status === "completed") {
-          clearInterval(interval);
-          setPollingInterval(null);
-          setAuthStatus("completed");
-          setSuccessMessage("BankID authentication completed successfully!");
-          completeRegistration();
-        }
-      } catch (error) {
-        console.error("Polling error:", error);
-        if (error.response?.status === 404) {
-          // Session expired
-          clearInterval(interval);
-          setPollingInterval(null);
-          setError("Authentication session expired. Please try again.");
-          setAuthStatus("expired");
-        }
+        const response = await axios.get("http://localhost:5000/api/clients");
+        setClients(response.data);
+      } catch (err) {
+        console.error("Error fetching clients:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
-    }, 3000); // Poll every 3 seconds
+    };
 
-    setPollingInterval(interval);
-  };
-
-  const completeRegistration = async () => {
-    try {
-      // Verify and fetch customer details
-      const verificationResponse = await axios.post(
-        "http://localhost:5000/api/clients/verify-and-fetch",
-        {
-          personalNumber: formData.personalNumber,
-        }
-      );
-
-      console.log("Verification complete:", verificationResponse.data);
-      if (verificationResponse.data.status === "success") {
-        setSuccessMessage(
-          "Registration and verification completed successfully!"
-        );
-        setSuccess(true);
-      } else {
-        throw new Error(
-          verificationResponse.data.message || "Verification failed"
-        );
-      }
-    } catch (error) {
-      console.error("Verification error:", error);
-      setError(
-        error.message ||
-          "Failed to complete registration. Please contact support."
-      );
-      // Allow retry
-      setAuthSession(null);
-      setAuthStatus(null);
-    }
-  };
+    fetchClients();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setError(null);
-    setSuccess(false);
 
     try {
       // 1. First register the client
-      const registrationResponse = await axios.post(
+      const registerResponse = await axios.post(
         "http://localhost:5000/api/clients/register",
         formData
       );
 
-      console.log("Registration response:", registrationResponse.data);
-
-      // 2. Generate BankID QR code
-      const qrResponse = await axios.post(
-        "http://localhost:5000/api/clients/send-bankid-qr",
+      // 2. Initiate BankID authentication
+      const authResponse = await axios.post(
+        "http://localhost:5000/api/bankid/start-mobile-auth",
         {
           personalNumber: formData.personalNumber,
           mobileNumber: formData.mobileNumber,
-          email: formData.email,
-          customerName: formData.customerName,
         }
       );
 
-      console.log("QR response:", qrResponse.data);
+      // 3. Handle mobile vs desktop redirection
+      if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        // Mobile - try to open BankID app directly
+        window.location.href = `bankid:///?autostarttoken=${authResponse.data.authRef}&redirect=null`;
 
-      if (qrResponse.data.status === "success") {
-        setAuthSession(qrResponse.data.reference || formData.personalNumber);
-        setSuccessMessage(
-          "A Mobile BankID QR code has been sent to your email. " +
-            "Please check your inbox and scan the QR code with your Mobile BankID app to authenticate."
-        );
-        setSuccess(true);
-
-        // If the backend returns the QR code directly
-        if (qrResponse.data.qrCodeDataUrl) {
-          setQrCodeUrl(qrResponse.data.qrCodeDataUrl);
-        }
-
-        // Start polling for authentication status
-        startAuthPolling(qrResponse.data.reference || formData.personalNumber);
+        // Fallback to web if app not installed
+        setTimeout(() => {
+          window.location.href = authResponse.data.redirectUrl;
+        }, 500);
+      } else {
+        // Desktop - redirect to web flow
+        window.location.href = authResponse.data.redirectUrl;
       }
     } catch (error) {
-      console.error("Registration error:", {
-        message: error.message,
-        response: error.response?.data,
+      console.error("Registration error:", error);
+      // Handle error
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // In your React component
+  const handleBankIDAuth = async () => {
+    try {
+      // 1. Initiate BankID auth
+      const authResponse = await axios.post("/api/bankid/auth", {
+        personalNumber: formData.personalNumber,
+        mobileNumber: formData.mobileNumber,
       });
 
-      let errorMessage = "Registration failed. Please try again.";
-      if (error.response) {
-        errorMessage = error.response.data?.message || errorMessage;
-        if (error.response.data?.error) {
-          errorMessage += ` (${error.response.data.error})`;
+      // 2. Open BankID app or redirect
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        window.location.href = `bankid:///?autostarttoken=${authResponse.data.sessionId}`;
+      } else {
+        window.open(authResponse.data.authUrl, "_blank");
+      }
+
+      // 3. Poll for completion
+      const pollCompletion = setInterval(async () => {
+        const statusResponse = await axios.get(
+          `/api/bankid/status/${authResponse.data.sessionId}`
+        );
+
+        if (statusResponse.data.status === "completed") {
+          clearInterval(pollCompletion);
+          const customerData = await axios.post("/api/customer/data", {
+            sessionId: authResponse.data.sessionId,
+          });
+
+          setCustomerData(customerData.data);
+          setVerificationComplete(true);
         }
+      }, 3000);
+    } catch (error) {
+      setError(error.response?.data?.message || "BankID authentication failed");
+    }
+  };
+
+  // In RegistrationForm.jsx - Update the startVerification function
+  const startVerification = async () => {
+    setVerificationInProgress(true);
+    setError(null);
+
+    try {
+      console.log("Starting verification with:", {
+        personalNumber: formData.personalNumber,
+        mobileNumber: formData.mobileNumber,
+      });
+
+      const response = await axios.post(
+        "http://localhost:5000/api/clients/verify-and-fetch",
+        {
+          personalNumber: formData.personalNumber,
+          mobileNumber: formData.mobileNumber,
+        },
+        {
+          timeout: 120000, // 2 minute timeout
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+        }
+      );
+
+      console.log("Verification response:", response.data);
+
+      if (response.data.status === "success") {
+        setSuccessMessage("Verification completed successfully!");
+        setVerificationComplete(true);
+        setCustomerData(response.data.data);
+      } else {
+        throw new Error(response.data.message || "Verification failed");
+      }
+    } catch (error) {
+      console.error("Detailed verification error:", {
+        message: error.message,
+        response: error.response?.data,
+        code: error.code,
+        stack: error.stack,
+      });
+
+      let errorMessage = "Verification failed";
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+        if (error.response.data.details) {
+          errorMessage += ` (${error.response.data.details})`;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
       }
 
       setError(errorMessage);
+      setVerificationComplete(false);
     } finally {
-      setIsSubmitting(false);
+      setVerificationInProgress(false);
     }
   };
 
@@ -172,13 +192,36 @@ const RegistrationForm = () => {
     });
     setSuccess(false);
     setError(null);
-    setAuthSession(null);
-    setAuthStatus(null);
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      setPollingInterval(null);
-    }
+    setVerificationInProgress(false);
+    setVerificationComplete(false);
+    setCustomerData(null);
   };
+
+  <BankIDAuth
+    personalNumber={formData.personalNumber}
+    mobileNumber={formData.mobileNumber}
+    onSuccess={() => {
+      setSuccessMessage("BankID authentication successful!");
+      setVerificationComplete(true);
+    }}
+    onError={(err) => {
+      setError(err.message || "BankID authentication failed");
+    }}
+  />;
+
+  <BankIDAuthButton
+    personalNumber={formData.personalNumber}
+    mobileNumber={formData.mobileNumber}
+    onSuccess={() => {
+      setSuccessMessage("BankID authentication successful!");
+      setVerificationComplete(true);
+      // Proceed with registration
+    }}
+    onError={(error) => {
+      setError(error);
+      setVerificationComplete(false);
+    }}
+  />;
 
   return (
     <div className="registration-container">
@@ -189,13 +232,15 @@ const RegistrationForm = () => {
         <div className="success-message">
           <div className="success-icon">✓</div>
           <div className="success-text">
-            <h3>Registration Initiated!</h3>
-            <p>{successMessage}</p>
-            {authStatus === "pending" && (
-              <div className="auth-status">
+            <h3>{successMessage}</h3>
+            {verificationInProgress && (
+              <div className="auth-status pending">
                 <div className="spinner"></div>
-                <p>Waiting for BankID authentication...</p>
+                <p>Verifying with BankID...</p>
               </div>
+            )}
+            {verificationComplete && (
+              <div className="auth-status success">✓ Verification complete</div>
             )}
           </div>
         </div>
@@ -208,98 +253,95 @@ const RegistrationForm = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="customerName">Customer Name</label>
-          <input
-            type="text"
-            id="customerName"
-            name="customerName"
-            value={formData.customerName}
-            onChange={handleChange}
-            required
-            disabled={authSession}
-          />
-        </div>
+      {!verificationComplete ? (
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="customerName">Customer Name</label>
+            <input
+              type="text"
+              id="customerName"
+              name="customerName"
+              value={formData.customerName}
+              onChange={handleChange}
+              required
+              disabled={verificationInProgress}
+            />
+          </div>
 
-        <div className="form-group">
-          <label htmlFor="email">Email</label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            required
-            disabled={authSession}
-          />
-        </div>
+          <div className="form-group">
+            <label htmlFor="email">Email</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              disabled={verificationInProgress}
+            />
+          </div>
 
-        <div className="form-group">
-          <label htmlFor="personalNumber">
-            Personal Number (YYYYMMDD-XXXX)
-          </label>
-          <input
-            type="text"
-            id="personalNumber"
-            name="personalNumber"
-            value={formData.personalNumber}
-            onChange={handleChange}
-            pattern="\d{8}-\d{4}"
-            title="Please enter in format YYYYMMDD-XXXX"
-            required
-            disabled={authSession}
-          />
-        </div>
+          <div className="form-group">
+            <label htmlFor="personalNumber">
+              Personal Number (YYYYMMDD-XXXX)
+            </label>
+            <input
+              type="text"
+              id="personalNumber"
+              name="personalNumber"
+              value={formData.personalNumber}
+              onChange={handleChange}
+              pattern="\d{8}-\d{4}"
+              title="Please enter in format YYYYMMDD-XXXX"
+              required
+              disabled={verificationInProgress}
+            />
+          </div>
 
-        <div className="form-group">
-          <label htmlFor="mobileNumber">Mobile Number</label>
-          <input
-            type="tel"
-            id="mobileNumber"
-            name="mobileNumber"
-            value={formData.mobileNumber}
-            onChange={handleChange}
-            required
-            disabled={authSession}
-          />
-        </div>
+          <div className="form-group">
+            <label htmlFor="mobileNumber">Mobile Number</label>
+            <input
+              type="tel"
+              id="mobileNumber"
+              name="mobileNumber"
+              value={formData.mobileNumber}
+              onChange={handleChange}
+              required
+              disabled={verificationInProgress}
+            />
+          </div>
 
-        <div className="button-group">
-          <button
-            type="submit"
-            className="submit-btn"
-            disabled={isSubmitting || authSession}
-          >
-            {isSubmitting ? "Processing..." : "Register & Verify with BankID"}
-          </button>
+          <div className="button-group">
+            <button
+              type="submit"
+              className="submit-btn"
+              disabled={isSubmitting || verificationInProgress}
+            >
+              {isSubmitting ? "Processing..." : "Register & Verify with BankID"}
+            </button>
+            <button type="button" onClick={handleClear} className="clear-btn">
+              Clear
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="customer-data">
+          <h3>Customer Details</h3>
+          <div className="data-section">
+            <h4>Personal Information</h4>
+            <pre>{JSON.stringify(customerData.person, null, 2)}</pre>
+          </div>
+          <div className="data-section">
+            <h4>Tax Deductions</h4>
+            <pre>{JSON.stringify(customerData.deduction, null, 2)}</pre>
+          </div>
+          <div className="data-section">
+            <h4>Property Information</h4>
+            <pre>{JSON.stringify(customerData.property, null, 2)}</pre>
+          </div>
           <button type="button" onClick={handleClear} className="clear-btn">
-            {authSession ? "Cancel Verification" : "Clear"}
+            Register New Client
           </button>
-        </div>
-      </form>
-
-      {authSession && (
-        <div className="auth-instructions">
-          <h3>BankID Authentication Instructions</h3>
-          <ol>
-            <li>
-              Open the <strong>BankID</strong> app on your mobile device
-            </li>
-            <li>Tap "Scan QR code" in the app</li>
-            <li>Point your camera at the QR code</li>
-            <li>Confirm the login in the app</li>
-          </ol>
-          <p className="warning">
-            Note: This will not work with regular QR scanners - you must use the
-            official BankID app
-          </p>
-        </div>
-      )}
-      {qrCodeUrl && (
-        <div className="qr-code-container">
-          <img src={qrCodeUrl} alt="BankID QR Code" className="qr-code" />
-          <p>Scan this QR code with your Mobile BankID app</p>
         </div>
       )}
     </div>

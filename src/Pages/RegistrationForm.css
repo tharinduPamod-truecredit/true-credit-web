@@ -126,3 +126,14 @@
   padding: 10px;
   background: white;
 }
+
+
+.qr-timer {
+  margin-top: 10px;
+  font-weight: bold;
+  color: #4CAF50;
+}
+
+.qr-timer.warning {
+  color: #f44336;
+}
